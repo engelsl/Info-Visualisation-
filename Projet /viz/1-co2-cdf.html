@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<style type="text/css" media="screen, print">
+			body  { margin: 30px 50px; font-family: sans-serif; }
+			line, polyline, path { stroke: black; fill: none; }
+			rect { stroke: none; }
+			.train  { fill: green; }
+			.public { fill: blue; }
+			.plane  { fill: darkred; }
+			.car	{ fill: orange; }
+			.other  { fill: grey; }
+		</style>
+		<title>CO2 Emissions cdf</title>
+	</head>
+	<body>
+		<h1>Émissions de CO<sub>2</sub> des missions (2019)</h1>
+
+		<script src="../vendor/d3-7.8.5/dist/d3.js"></script>
+		<script>
+
+// helpers //////////////////////////////////////////////////////////////////
+
+var parse_time = d3.timeParse("%Y-%m-%d");
+var format_percent = d3.format('.0%');
+var format_f = d3.format('.2f');
+
+var body = d3.select("body");
+var margin = {top: 50, right: 75, bottom: 80, left: 50},
+	width = 600 - margin.left - margin.right,
+	height = 400 - margin.top - margin.bottom;
+
+let year = 2019;
+var summary = body.append('div');
+var threshold = d3.dispatch('change');
+
+
+// per user /////////////////////////////////////////////////////////////////
+
+function cdf(emissions) {
+	
+	// frame //
+	
+	let x = d3.scaleLinear()
+		.range([0, width])
+		.clamp(true);
+
+	let y = d3.scaleLinear()
+		.range([height, 0])
+		.clamp(true);
+
+	let svg = body.append('svg')
+		.attr('width', width + margin.left + margin.right)
+		.attr('height', height + margin.top + margin.bottom)
+		.append('g')
+			.attr('transform', `translate(${margin.left},${margin.top})`);
+
+
+	// cdf //
+	
+	let cemissions = d3.cumsum(emissions.map(e => e[1]));
+
+	let [u0, u1] = [0, cemissions.length-1];
+	let [t0, t1] = [0, cemissions[u1]];
+//	let [u0, u1] = [cemissions.length-1-220, cemissions.length-1];
+//	let [t0, t1] = [0, 320];
+	x.domain([u0, u1]);
+	y.domain([t0, t1]);
+	
+	let cdf = d3.line()
+		.x((d, i) => x(i))
+		.y((d, i) => y(d));
+
+	let line = svg.append('path').datum(cemissions)
+		.attr('stroke-opacity', .5)
+		.attr('d', cdf);
+
+	let savings = svg.append('path').datum(cemissions)
+		.attr('d', cdf);
+	
+	
+	// axis //
+
+	svg.append('text')
+		.html("Émissions par personne cumulées")
+		.attr('font-weight', 'bold')
+		.attr('font-size', '120%')
+		.attr('x', x(u0)-5)
+		.attr('y', y(t0)+75);
+   
+	let xAxis = d3.axisBottom(x);
+	svg.append('g')
+		.attr('transform', `translate(0,${y(u0)+23})`)
+		.call(xAxis);
+
+	svg.append('text')
+		.text("# personnes")
+		.attr('text-anchor', 'end')
+		.attr('x', x(cemissions.length))
+		.attr('y', y(t0)+55);
+	
+	let yAxis = d3.axisRight(y);   
+	svg.append('g')
+		.attr('transform', `translate(${x(u1)+22})`)
+		.call(yAxis);
+
+	svg.append('text')
+		.text("tonnes de CO2")
+		.attr('transform', `translate(${x(u1)+65},${y(t1)}) rotate(-90)`)
+		.attr('text-anchor', 'end');
+	
+	
+	// cursors //
+	
+	let [x0, x1] = x.range();
+	let [y0, y1] = y.range();
+//	let [x0, x1] = [x(0), x(u1)];
+//	let [y0, y1] = [y(0), y(t1)];
+	
+	let sCursor = svg.append('line')
+		.attr('x1', `${x0}`)
+		.attr('y1', `${y0}`)
+		.attr('x2', `${x1}`)
+		.attr('y2', `${y1}`);
+	
+	let sLabel = svg.append('text')
+		.attr('text-anchor', 'end');
+	let gCursor = svg.append('polyline')
+		.attr('stroke-opacity', .5)
+		.attr('points', `9.5,0 -.5,0 -.5,-30`);
+	let gLabel = svg.append('text')
+		.attr('transform', 'rotate(-90)');
+
+	
+	let xCursor = svg.append('g');
+	
+	xCursor.append('polyline')
+		.attr('stroke-opacity', .5)
+		.attr('transform', `translate(${-x0-.5},-.5)`)
+		.attr('points', `${x0-20},${y0} ${x0},${y0} ${x0},${y1} ${x0+20},${y1}`);
+	let xLabell = xCursor.append('text')
+		.attr('y', y0+17)
+		.attr('text-anchor', 'end');
+	let xLabelr = xCursor.append('text')
+		.attr('y', -5)
+		.attr('text-anchor', 'start');
+		
+	let yCursor = svg.append('g');
+	
+	yCursor.append('polyline')
+		.attr('stroke-opacity', .5)
+		.attr('transform', 'translate(-.5,-.5)')
+		.attr('points', `${x0},${y1+20} ${x0},${y1} ${x1},${y1} ${x1},${y1-20}`);
+	let yLabell = yCursor.append('text')
+		.attr('transform', 'rotate(-90)')
+		.attr('y', x0-5)
+		.attr('text-anchor', 'end');
+	let yLabelr = yCursor.append('text')
+		.attr('transform', 'rotate(-90)')
+		.attr('y', x1+16)
+		.attr('text-anchor', 'start');
+
+
+	// interaction //
+	
+	let bg = svg.append('rect') // to capture mouse events
+		.attr('fill-opacity', 0)
+		.attr('x', -margin.left)
+		.attr('y', -margin.top)
+		.attr('width', width + margin.left + margin.right)
+		.attr('height', height + margin.top + margin.bottom);
+
+	bg.on('mousemove', function(event) {
+		let [xm, ym] = d3.pointer(event);
+		let um = x.invert(xm);
+		let tm = y.invert(ym);
+		
+		// find intersection of the curve with ray from top-left corner to mouse position
+		let u = 0;
+		while((u-u0)*(t1-tm) < (t1-cemissions[u])*(um-u0)) {
+			u += 1;
+		}
+		
+		threshold.call('change', this, u);
+	});
+	
+	
+	let callback = function(u) {
+		let t  = cemissions[u];
+		let t1 = cemissions[u1];
+		
+		// cursors		
+//		let pu = (u-u0)/(u1-u0); // proportion of users
+//		let pt = (t-t0)/(t1-t0); // proportion of emissions
+		let pu = u/u1; // proportion of users
+		let pt = t/t1; // proportion of emissions
+
+		xCursor.attr('transform', `translate(${x(u)},0)`);
+		xLabell.text(format_percent(pu));
+		xLabelr.text(format_percent(1-pu));
+		yCursor.attr('transform', `translate(0,${y(t)})`);
+		yLabell.text(format_percent(pt));
+		yLabelr.text(format_percent(1-pt));
+		
+		// slope
+		savings.datum(cemissions.slice(0, u))
+			.attr('d', cdf);
+		
+		let slope = emissions[u][1]; // ton/user
+		let u_s = u - t/slope;
+		let t_s = t + (u1-u)*slope;
+		sCursor
+			.attr('x1', `${x(u)}`)
+			.attr('y1', `${y(t)}`)
+			.attr('y2', `${y(t_s)}`);
+		sLabel
+			.attr('transform', `translate(${x1-5}, ${y(t_s)-5}) rotate(${Math.atan2(y(t)-y0,x(u)-x(u_s))*180/Math.PI})`)
+			.text(format_f(slope) + " t/p");
+		gLabel
+			.attr('transform', `translate(${x(u1)+16},${y(t_s)-5}) rotate(-90)`)
+			.text(format_percent((t_s-t1)/t1));
+		gCursor
+			.attr('transform', `translate(${x1},${y(t_s)})`);
+
+		summary.html(`<p>
+<b>${format_percent(1-pt)} des émissions</b> totales de CO<sub>2</sub> ont été émises par les <br />
+<b>${format_percent(1-pu)} des personnes</b> les plus émettrices.
+	</p>
+	<p>
+Un plafond individuel fixé à :<br />
+<b>${format_f(slope)} tonnes/personne/an</b> aurait permis d'atteindre<br />
+<b>${format_percent((t1-t_s)/t1)}</b> de réduction des émissions globales.
+	</p>
+		`);
+	}
+	threshold.on('change.cdf', callback);
+}
+
+
+function df(emissions, users) {
+	// frame //
+	
+	let x = d3.scaleLinear()
+		.range([0, width])
+		.clamp(true);
+
+	let y = d3.scaleLinear()
+		.range([height, 0])
+		.clamp(true);
+  
+	let svg = body.append('svg')
+		.attr('width', width + margin.left + margin.right)
+		.attr('height', height + margin.top + margin.bottom)
+		.append('g')
+			.attr('transform', `translate(${margin.left},${margin.top})`);
+
+
+	// emissions //
+	
+	let [u0, u1] = [0, emissions.length-1];
+	let [t0, t1] = [0, emissions[u1][1]];
+//	let [u0, u1] = [emissions.length-1-220, emissions.length-1];
+//	let [t0, t1] = [0, 15];
+	x.domain([u0, u1]);
+	y.domain([t0, t1]);
+	
+	let savings =  svg.append('path') // to be updated by interaction callback
+		.style('fill', 'grey')
+		.style('opacity', '.5');
+
+	let df = d3.line()
+		.x((d, i) => x(i))
+		.y((d, i) => y(d[1]));
+
+	let line = svg.append('path').datum(emissions)
+		.attr('d', df);
+	
+	// axis //
+	
+	svg.append('text')
+		.html("Émissions par personne")
+		.attr('font-weight', 'bold')
+		.attr('font-size', '120%')
+		.attr('x', x(u0)-5)
+		.attr('y', y(t0)+75);
+
+	let xAxis = d3.axisBottom(x);
+	svg.append('g')
+		.attr('transform', `translate(0,${y(t0)+23})`)
+		.call(xAxis);
+
+	svg.append('text')
+		.text("# personnes")
+		.attr('text-anchor', 'end')
+		.attr('x', x(emissions.length))
+		.attr('y', y(t0)+55);
+	
+	let yAxis = d3.axisRight(y);
+		svg.append('g')
+		.attr('transform', `translate(${x(u1)+22})`)
+		.call(yAxis);
+
+	svg.append('text')
+		.text("tonnes de CO2")
+		.attr('transform', `translate(${x(u1)+65},${y(t1)}) rotate(-90)`)
+		.attr('text-anchor', 'end');
+	
+ 
+	 // cursors //
+	
+	let [x0, x1] = x.range();
+	let [y0, y1] = y.range();
+//	let [x0, x1] = [x(0), x(u1)];
+//	let [y0, y1] = [y(0), y(t1)];
+		
+	let sLabel = svg.append('text')
+		.attr('text-anchor', 'end');
+	
+	let yCursor = svg.append('g');
+	yCursor.append('polyline')
+		.attr('stroke-opacity', .5)
+		.attr('transform', 'translate(-.5,-.5)')
+		.attr('points', `${x0},${y1+20} ${x0},${y1} ${x1},${y1} ${x1},${y1-20}`);
+	let yLabell = yCursor.append('text')
+		.attr('transform', 'rotate(-90)')
+		.attr('y', x0-5)
+		.attr('text-anchor', 'end');
+	let yLabelr = yCursor.append('text')
+		.attr('transform', 'rotate(-90)')
+		.attr('y', x1+16)
+		.attr('text-anchor', 'start');
+	
+	// interaction //
+	
+	let bg = svg.append('rect') // to capture mouse events
+		.attr('fill-opacity', 0)
+		.attr('x', -margin.left)
+		.attr('y', -margin.top)
+		.attr('width', width + margin.left + margin.right)
+		.attr('height', height + margin.top + margin.bottom);
+
+	bg.on('mousemove', function(event) {
+		let [xm, ym] = d3.pointer(event);
+		let em = y.invert(ym);
+		
+		// find user with this emission
+		let u = 0;
+		while(emissions[u][1] < em) {
+			u += 1;
+		}
+		threshold.call('change', this, u);
+	});
+ 
+
+	let callback = function(u) {
+		let e = emissions[u][1]; // ton/user
+		let pt = d3.sum(emissions.map(v => d3.min([v[1], e])))/
+				 d3.sum(emissions.map(v => v[1]));
+		
+		yCursor.attr('transform', `translate(0,${y(e)})`);
+		yLabell.text(format_percent(pt));
+		yLabelr.text(format_percent(1-pt));
+
+		sLabel
+			.attr('x', `${x(u)-5}`)
+			.attr('y', `${y(e)-5}`)
+			.text(format_f(e) + " t/p");
+		
+		savings.datum(emissions)
+			.attr('d', d3.area()
+				.x((d, i) => x(i))
+				.y0((d, i) => y(0))
+				.y1((d, i) => y(d3.min([d[1], e])))
+			);
+		
+	}
+	
+	threshold.on('change.df', callback);
+}
+
+
+// per mission //////////////////////////////////////////////////////////////
+
+function m_df(missions) {
+	// frame //
+	
+	let x = d3.scaleLinear()
+		.range([0, width*2+ margin.left + margin.right])
+		.clamp(true);
+
+	let y = d3.scaleLinear()
+		.range([height, 0])
+		.clamp(true);
+  
+	let svg = body.append('svg')
+		.attr('width', (width + margin.left + margin.right)*2)
+		.attr('height', height + margin.top + margin.bottom)
+		.append('g')
+			.attr('transform', `translate(${margin.left},${margin.top})`);
+
+
+	// emissions //
+	
+	let [u0, u1] = [0, missions.length-1];
+	let [t0, t1] = [0, missions[u1].emission];
+//	let [u0, u1] = [missions.length-1-850, missions.length-1];
+//	let [t0, t1] = [0, 5];
+	x.domain([u0, u1]);
+	y.domain([t0, t1]);
+	
+	let savings =  svg.append('path') // to be updated by interaction callback
+		.style('fill', 'grey')
+		.style('opacity', '.5');
+
+	let ms = svg.selectAll('.mission')
+		.data(missions)
+		.enter().append('rect')
+			.attr('class', m => `mission ${m.mode}`)
+			.attr('x', (m, i) => `${x(i-.5)}`)
+			.attr('y', m => `${y(m.emission)}`)
+			.attr('width', (m, i) => `${x(i+.5)-x(i-.5)}`)
+			.attr('height', m => `${y(0)-y(m.emission)}`);
+
+	let df = d3.line()
+		.x((d, i) => x(i))
+		.y((d, i) => y(d.emission));
+
+	let line = svg.append('path').datum(missions)
+		.attr('d', df);
+	
+		
+	// axis //
+	
+	svg.append('text')
+		.html("Émissions par mission")
+		.attr('font-weight', 'bold')
+		.attr('font-size', '120%')
+		.attr('x', x(u0)-5)
+		.attr('y', y(t0)+75);
+
+	let xAxis = d3.axisBottom(x);
+	svg.append('g')
+		.attr('transform', `translate(0,${y(t0)+23})`)
+		.call(xAxis);
+
+	svg.append('text')
+		.text("# missions")
+		.attr('text-anchor', 'end')
+		.attr('x', x(missions.length))
+		.attr('y', y(u0)+55);
+	
+	let yAxis = d3.axisRight(y);
+	svg.append('g')
+		.attr('transform', `translate(${x(u1)+22})`)
+		.call(yAxis);
+
+	svg.append('text')
+		.text("tonnes de CO2")
+		.attr('transform', `translate(${x(u1)+65},${y(t1)}) rotate(-90)`)
+		.attr('text-anchor', 'end');
+		
+	// legend //
+	
+	var modes = [
+		{mode: "other",  name: "autre"},
+		{mode: "plane",  name: "avion"},
+		{mode: "car",    name: "voiture"},
+		{mode: "public", name: "public"},
+		{mode: "train",  name: "train"},
+	];
+	
+	var modeAxis = svg.selectAll('.modes')
+		.data(modes)
+		.enter().append('g')
+			.attr('transform', (d, i) => `translate(${x(u0)},${y(t0)-10-i*20})`);
+
+	modeAxis.append('text')
+		.text(d => d.name)
+		.attr('class', m => `${m.mode}`);
+
+}
+
+
+// data loading /////////////////////////////////////////////////////////////
+
+Promise.all([
+
+	d3.tsv("../data/missions.tsv", d => ({
+		mission_id: +d['#mission_id'],
+		user_id:    +d.user_id,
+		place_id:   +d.place_id,
+		date:        parse_time(d.date),
+		duration:   +d.duration,
+		mode:        d.mode,
+		co2:        +d.co2,
+	})),
+	d3.tsv("../data/users.tsv", d => ({
+		user_id:    +d['#user_id'],
+		name:        d.name,
+		house:       d.house,
+		institution: d.institution,
+		rank:        d.rank,
+	})),
+	d3.tsv("../data/places.tsv", d => ({
+		place_id:  +d['#place_id'],
+		distance:  +d.distance,
+		country:    d.country,
+	})),
+	d3.tsv("../data/countries.tsv", d => ({
+		alpha:     d['#alpha2'],
+		country:   d.country,
+		continent: d.continent,
+	})),
+
+
+]).then(function(data) {
+
+	let missions  = data[0];
+	let users     = Object.fromEntries(data[1].map(u => [u.user_id, u]));
+	let places    = Object.fromEntries(data[2].map(p => [p.place_id, p]));
+	let countries = Object.fromEntries(data[3].map(c => [c.alpha, c]));
+
+	// data: emission per user //
+
+	missions = missions.filter(m => m.date >= new Date(`${year}-01-01`) & m.date < new Date(`${year+1}-01-01`));
+	
+	let emissions = Object.fromEntries(Object.keys(users).map(u_id => [u_id, 0]));
+	for(let mission of missions) {
+		let emission = mission.co2 * places[mission.place_id].distance*2 / 1000; // tons of CO2
+		mission.emission = emission;
+		emissions[mission.user_id] += emission;
+	}
+	emissions = Object.entries(emissions);
+	emissions = emissions.filter(e => e[1] > 0.);
+	emissions.sort((a, b) => a[1]-b[1]);
+	
+	df(emissions, users);
+	cdf(emissions);
+	threshold.call('change', this, 0.);
+	
+	
+	// data: emission per mission //
+
+	body.append('br');
+	missions = missions.filter(e => e.emission > 0.);
+	missions.sort((a, b) => a.emission-b.emission);
+	m_df(missions);
+});
+		</script>
+	</body>
+</html>

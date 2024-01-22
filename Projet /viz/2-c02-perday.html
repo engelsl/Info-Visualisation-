@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<style type="text/css" media="screen, print">
+			body  { margin: 30px 50px; font-family: sans-serif; }
+		</style>
+		<title>CO2 Emissions cdf</title>
+	</head>
+	<body>
+		<h1>CO<sub>2</sub> Emissions per day</h1>
+
+		<script src="../vendor/d3-7.8.5/dist/d3.js"></script>
+		<script>
+
+// helpers //////////////////////////////////////////////////////////////////
+
+var parse_time  = d3.timeParse("%Y-%m-%d");
+var format_time = d3.timeFormat("%Y-%m-%d");
+
+var margin = {top: 50, right: 50, bottom: 50, left: 50},
+	width = 1200 - margin.left - margin.right,
+	height = 600 - margin.top - margin.bottom;
+
+var svg = d3.select('body').append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom)
+  .append('g')
+    .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+var x = d3.scaleTime()
+    .range([0, width]);
+
+var y = d3.scaleLinear()
+    .range([height, 0]);
+
+var color = d3.scaleSequential(d3.interpolateBlues);
+
+
+// data loading /////////////////////////////////////////////////////////////
+
+Promise.all([
+
+	d3.tsv("../data/missions.tsv", d => ({
+		mission_id: +d['#mission_id'],
+		user_id:    +d.user_id,
+		place_id:   +d.place_id,
+		date:        parse_time(d.date),
+		duration:   +d.duration,
+		mode:        d.mode,
+		co2:        +d.co2,
+	})),
+	d3.tsv("../data/users.tsv", d => ({
+		user_id:    +d['#user_id'],
+		axe:         d.axe,
+		group:       d.group,
+		institution: d.institution,
+		rank:        d.rank,
+	})),
+	d3.tsv("../data/places.tsv", d => ({
+		place_id:  +d['#place_id'],
+		distance:  +d.distance,
+		country:    d.country,
+	})),
+	d3.tsv("../data/countries.tsv", d => ({
+		alpha:     d['#alpha2'],
+		country:   d.country,
+		continent: d.continent,
+	})),
+
+
+]).then(function(data) {
+
+	let missions  = data[0];
+	let users     = Object.fromEntries(data[1].map(u => [u.user_id, u]));
+	let places    = Object.fromEntries(data[2].map(p => [p.place_id, p]));
+	let countries = Object.fromEntries(data[3].map(c => [c.alpha, c]));
+
+	// data: emission per user //
+
+	var emissions = new Map();
+	for(let mission of missions) {
+		let mission_days = d3.timeDay.range(mission.date, d3.timeDay.offset(mission.date, 1+mission.duration/24))
+		let emission_per_day = mission.co2/1000 * places[mission.place_id].distance*2 / mission_days.length; // tons of CO2
+//		if(emission_per_day > .5) { console.log(mission); };
+		for(let day of mission_days) {
+			var date = +day;
+			var c_emmission = emissions.get(date) || 0.;
+			emissions.set(date, c_emmission + emission_per_day);
+		}
+	}
+
+	y.domain(d3.extent(emissions.values()));
+//	const line = d3.line()
+//		.x(d => x(+d))
+//		.y(d => y(emissions.get(+d) || 0.));
+	const line = d3.area()
+		.x(d => x(+d))
+		.y0(y(0))
+		.y1(d => y(emissions.get(+d) || 0.));
+
+	color.domain([2010, 2024]);
+	x.domain([parse_time('2014-01-01'), parse_time('2024-01-01')]);
+
+	for(let year = 2013; year < 2024; year += 1) {
+		let b = parse_time(`${year}-01-01`);
+		let e = parse_time(`${year+1}-01-01`);
+	
+		svg.append("path")
+			.attr("d", line(d3.timeDay.range(b, e)))
+			.attr("stroke", color(year))
+			.attr("fill", color(year));
+		
+		svg.selectAll(`.dot-${year}`)
+			.data(missions.filter(m => m.date >= b & m.date < e))
+			.join('g')
+				.attr('class', `dot-${year}`)
+				.call(g => {
+					g.append('circle')
+						.attr('cx', m => x(m.date))
+						.attr('cy', m => y(emissions.get(+m.date) || 0.))
+						.attr('r', 5)
+						.attr('opacity', 0);
+					g.append('title')
+						.text(d => JSON.stringify(d, null, '\t'));
+					return g;
+				});
+	}
+	const xAxis = d3.axisBottom(x)
+		.ticks(d3.timeMonth.every(3))
+		.tickFormat(date => (d3.timeYear(date) < date) ? d3.timeFormat('%b')(date) : d3.timeFormat('%Y')(date));
+	
+	svg.append("g")
+		.attr("transform", `translate(0,${y(0)})`)
+		.call(xAxis);
+
+	svg.append("g")
+		.call(d3.axisLeft(y));
+	
+});
+
+		</script>
+	</body>
+</html>
