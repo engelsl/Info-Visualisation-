@@ -39,6 +39,18 @@ const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
 
 function handleInstitutionHover(event, d) {
+    const infoText = d3.select("#info-institution-text");
+    infoText.text("");
+
+    infoText.append("tspan")
+        .text(`Institution: ${d[0]}`)
+        .attr("x", 10)
+        .attr("dy", 15);
+
+    infoText.append("tspan")
+        .text(`CO2 Emission: ${d[1].toFixed(3)}`)
+        .attr("x", 10)
+        .attr("dy", 15);
 
     // Part for the institution graph
     //console.log("Hovering over institution:", d);
@@ -79,6 +91,24 @@ function handleInstitutionHover(event, d) {
 
 
 function handleTeamHover(event, d) {
+
+    const infoText = d3.select("#info-team-text");
+    infoText.text("");
+
+    infoText.append("tspan")
+        .text(`Institution: ${d[0].split("_")[1]}`)
+        .attr("x", 5)
+        .attr("dy", 0);
+
+    infoText.append("tspan")
+        .text(`Team: ${d[0].split("_")[0]}`)
+        .attr("x", 5)
+        .attr("dy", 10);
+
+    infoText.append("tspan")
+        .text(`CO2 Emission: ${d[1].toFixed(3)}`)
+        .attr("x", 5)
+        .attr("dy", 10);
 
     // Part for the institution graph
     //console.log("Hovering over institution:", d);
@@ -170,6 +200,7 @@ function CO2EmissionsPerTeam(data) {
         .on("mouseout", function() {
           d3.selectAll(".bar-institution").attr("opacity", 1);
           d3.selectAll(".bar-teams").attr("opacity", 1);
+          d3.select("#info-team-text").text("");
         });
 
     svg.append("g")
@@ -205,6 +236,27 @@ function CO2EmissionsPerTeam(data) {
         .style("font-size", "16px")
         .style("text-decoration", "underline")
         .text("CO2 Emissions per Team ");
+
+    //Create rectangle to display information vers mouseover
+    let infoGroup = svg.append('g')
+        .attr("id", "info-team")
+        .attr("transform", `translate(${chartWidth - 200},${10})`);
+
+    // Rectangle
+    infoGroup.append("rect")
+        .attr("width", 180)
+        .attr("height", 60)
+        .attr("fill", "white")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1);
+
+    // Text
+    infoGroup.append("text")
+        .attr("x", 10)
+        .attr("y", 25)
+        .attr("font-size", 12)
+        .attr("id", "info-team-text");
+
 }
 function CO2EmissionsPerInstitution(data) {
     const cumulativeData = {};
@@ -251,6 +303,7 @@ function CO2EmissionsPerInstitution(data) {
         .on("mouseout", function() {
           d3.selectAll(".bar-institution").attr("opacity", 1);
           d3.selectAll(".bar-teams").attr("opacity", 1);
+          d3.select("#info-institution-text").text("");
         });
 
     svg.append("g")
@@ -284,6 +337,26 @@ function CO2EmissionsPerInstitution(data) {
         .style("font-size", "16px")
         .style("text-decoration", "underline")
         .text("CO2 Emissions per Institution");
+
+    //Create rectangle to display information vers mouseover
+    let infoGroup = svg.append('g')
+        .attr("id", "info-team")
+        .attr("transform", `translate(${chartWidth - 200},${10})`);
+
+    // Rectangle
+    infoGroup.append("rect")
+        .attr("width", 180)
+        .attr("height", 60)
+        .attr("fill", "white")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1);
+
+    // Text
+    infoGroup.append("text")
+        .attr("x", 10)
+        .attr("y", 25)
+        .attr("font-size", 12)
+        .attr("id", "info-institution-text");
 }
 
 // Load user data to create a mapping between user_id and team/home
