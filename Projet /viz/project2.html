@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style type="text/css" media="screen, print">
+      body  { margin: 30px 50px; font-family: sans-serif; }
+      .chart-container { display: inline-block; }
+    </style>
+    <title>Distribution over Teams of CO2 Emissions per Institution</title>
+  </head>
+  <body>
+    <h1>Distribution over Teams of CO<sub>2</sub> Emissions per Institution</h1>
+
+    <script src="../vendor/d3-7.8.5/dist/d3.js"></script>
+    <script>
+
+// ######################################### HELPERS ##############################################
+
+var parse_time = d3.timeParse("%Y-%m-%d");
+var body = d3.select("body");
+
+const windowWidth = window.innerWidth;
+const windowHeight = window.innerHeight;
+const margin = { top: 50, right: 75, bottom: 80, left: 50 };
+const svgWidth = windowWidth - 250;  // Adjust this to the desired width of the SVG container
+const svgHeight = windowHeight; // Adjust this to the desired height of the SVG container
+const chartWidth = (svgWidth - margin.left - margin.right) / 2;
+const height = svgHeight - margin.top - margin.bottom;
+
+var summary = body.append('div');
+
+// Declare userTeamMap and userHomeMap in a higher scope
+let userTeamMap, userHomeMap;
+
+// Define color scale for institutions
+const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+// ###################################### FUNCTIONS #####################################################
+
+
+function handleInstitutionHover(event, d) {
+  const infoText = d3.select("#info-institution-text");
+  infoText.text("");
+
+  infoText.append("tspan")
+    .text(`Institution: ${d[0]}`)
+    .attr("x", 10)
+    .attr("dy", 15);
+
+  infoText.append("tspan")
+    .text(`CO2 Emission: ${d[1].toFixed(3)}`)
+    .attr("x", 10)
+    .attr("dy", 15);
+
+  const hoveredValue = d[0].split("_")[1];
+
+  const barsWithSameMode = d3.selectAll(".bar-institution")
+    .filter(data => data[0].split("_")[1] === hoveredValue);
+
+  barsWithSameMode.attr("opacity", 1);
+
+  const barsWithDifferentMode = d3.selectAll(".bar-institution")
+    .filter(data => data[0].split("_")[1] !== hoveredValue);
+
+  barsWithDifferentMode.attr("opacity", 0.3);
+
+  // Reset the opacity of other bars
+  d3.selectAll(".bar-teams").filter(data => data[0].split("_")[1] === modeOfHoveredValue).attr("opacity", 1);
+}
+
+
+
+function CO2EmissionsPerInstitution(data) {
+    const cumulativeData = {};
+
+    const cumulativeCO2 = {};
+    
+    data.forEach((d) => {
+        const home = userHomeMap[d.user_id];
+        const mode = d.mode;
+        const key = home + "_" + mode;
+        cumulativeData[key] = (cumulativeData[key] || 0) + d.co2 ;
+        cumulativeCO2[home] = (cumulativeCO2[home] || 0) + d.co2 ;
+    });
+
+
+    Object.entries(cumulativeData).forEach(([key, value]) => {
+        const home = key.split("_")[0];
+        cumulativeData[key] = (value / cumulativeCO2[home])*100;
+    });
+
+
+    // Sort data in descending order based on values
+    const sortedData = Object.entries(cumulativeData).sort((a, b) => b[0].split("_")[1].localeCompare(a[0].split("_")[1]));
+
+    const colorScaleModes = d3.scaleOrdinal(d3.schemeCategory10);
+
+    let svg = body.append('div')
+        .attr("class", "chart-container")
+        .append('svg')
+        .attr("width", chartWidth + margin.left + margin.right)
+        .attr("height", svgHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const xScale = d3.scaleBand()
+        .range([0, chartWidth])
+        .domain(sortedData.map(d => d[0].split("_")[0])) // Use sorted data for x domain
+        .padding(0.2);
+
+    const yScale = d3.scaleLinear()
+        .range([height, 0])
+        .domain([0, 110]);
+
+    const cumulativeValues = {};
+
+
+    svg.selectAll(".bar-institution")
+        .data(sortedData)
+        .enter().append("rect")
+        .attr("class", "bar-institution")
+        .attr("x", d => {
+            const newX = xScale(d[0].split("_")[0]);
+            if (!cumulativeValues[newX]) {
+                cumulativeValues[newX] = height;
+            }
+            return newX;
+        })
+        .attr("width", xScale.bandwidth())
+        .attr("y", (d) => {
+            const xValue = xScale(d[0].split("_")[0]);
+            const currentY = cumulativeValues[xValue] - (height - yScale(d[1]));
+            cumulativeValues[xValue] = currentY;
+            return currentY;
+        })
+        .attr("height", d => height - yScale(d[1]))
+        .attr("fill", d => colorScaleModes(d[0].split("_")[1])) // Utiliser le mode pour définir la couleur
+        .attr("opacity", 1) // Initial opacity set to 1
+        .on("mouseover", function (event, d) {
+          handleInstitutionHover(event, d);
+        })
+        .on("mouseout", function() {
+          d3.selectAll(".bar-institution").attr("opacity", 1);
+          d3.selectAll(".bar-teams").attr("opacity", 1);
+          d3.select("#info-institution-text").text("");
+        });
+
+    svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(xScale))
+        .selectAll("text") // Rotate x-axis labels for better readability
+            .attr("transform", "rotate(-45)")
+            .attr("text-anchor", "end");
+
+    svg.append("g")
+        .call(d3.axisLeft(yScale));
+        // Adjusted margins for better spacing
+        svg.append("text")
+        .attr("x", chartWidth / 2)
+        .attr("y", height + margin.top + 100)
+        .style("text-anchor", "middle")
+        .text("Institutions");
+
+    svg.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - height / 2)
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("CO2 Emissions in %");
+
+    svg.append("text")
+        .attr("x", chartWidth / 2)
+        .attr("y", 0 - (margin.top / 2))
+        .style("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("text-decoration", "underline")
+        .text("CO2 Emissions per Institution");
+
+    //Create rectangle to display information vers mouseover
+    let infoGroup = svg.append('g')
+        .attr("id", "info-team")
+        .attr("transform", `translate(${chartWidth - 200},${10})`);
+
+    // Rectangle
+    infoGroup.append("rect")
+        .attr("width", 180)
+        .attr("height", 60)
+        .attr("fill", "white")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1);
+
+    // Text
+    infoGroup.append("text")
+        .attr("x", 10)
+        .attr("y", 25)
+        .attr("font-size", 12)
+        .attr("id", "info-institution-text");
+}
+
+// Load user data to create a mapping between user_id and team/home
+// Load user data to create a mapping between user_id and team/home
+d3.tsv("../data/users.tsv", d => ({
+  user_id: +d['#user_id'],
+  name: d.name,
+  house: d.house,
+  institution: d.institution,
+  rank: d.rank,
+})).then(userdata => {
+  // Create a mapping between user_id and team/home
+  userTeamMap = {};
+  userHomeMap = {};
+  userdata.forEach(user => {
+    userTeamMap[user.user_id] = {
+      team: user.house,
+      institution: user.institution,
+    };
+    userHomeMap[user.user_id] = user.institution; // Using 'house' as the home attribute
+  });
+
+  // Load CO2 emissions data and process
+  d3.tsv("../data/missions.tsv", d => ({
+    mission_id: +d['#mission_id'],
+    user_id: +d.user_id,
+    place_id: +d.place_id,
+    date: parse_time(d.date),
+    duration: +d.duration,
+    mode: d.mode,
+    co2: +d.co2,
+  })).then(data => {
+    // Use userHomeMap to associate homes with CO2 emissions data
+    CO2EmissionsPerInstitution(data);
+  });
+});
+
+    </script>
+  </body>
+</html>
