@@ -6,10 +6,10 @@
       body  { margin: 30px 50px; font-family: sans-serif; }
       .chart-container { display: inline-block; }
     </style>
-    <title>Distribution over Teams of CO2 Emissions per Institution</title>
+    <title>Percentage of different means of transport used by each Institutions</title>
   </head>
   <body>
-    <h1>Distribution over Teams of CO<sub>2</sub> Emissions per Institution</h1>
+    <h1>How does the mode of transportation vary among the different institutions?</h1>
 
     <script src="../vendor/d3-7.8.5/dist/d3.js"></script>
     <script>
@@ -43,12 +43,17 @@ function handleInstitutionHover(event, d) {
   infoText.text("");
 
   infoText.append("tspan")
-    .text(`Institution: ${d[0]}`)
+    .text(`Institution: ${d[0].split("_")[0]}`)
+    .attr("x", 10)
+    .attr("dy", 0);
+
+  infoText.append("tspan")
+    .text(`Mean of transport: ${d[0].split("_")[1]}`)
     .attr("x", 10)
     .attr("dy", 15);
 
   infoText.append("tspan")
-    .text(`CO2 Emission: ${d[1].toFixed(3)}`)
+    .text(`Percentage: ${d[1].toFixed(3)}`)
     .attr("x", 10)
     .attr("dy", 15);
 
@@ -65,7 +70,7 @@ function handleInstitutionHover(event, d) {
   barsWithDifferentMode.attr("opacity", 0.3);
 
   // Reset the opacity of other bars
-  d3.selectAll(".bar-teams").filter(data => data[0].split("_")[1] === modeOfHoveredValue).attr("opacity", 1);
+  d3.selectAll(".bar-teams").filter(data => data[0].split("_")[1] === hoveredValue).attr("opacity", 1);
 }
 
 
@@ -94,6 +99,13 @@ function CO2EmissionsPerInstitution(data) {
     const sortedData = Object.entries(cumulativeData).sort((a, b) => b[0].split("_")[1].localeCompare(a[0].split("_")[1]));
 
     const colorScaleModes = d3.scaleOrdinal(d3.schemeCategory10);
+    
+    const drag = d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+
+    
 
     let svg = body.append('div')
         .attr("class", "chart-container")
@@ -103,14 +115,41 @@ function CO2EmissionsPerInstitution(data) {
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const xScale = d3.scaleBand()
+    //Create rectangle to display information vers mouseover
+    let infoGroup = svg.append('g')
+        .attr("id", "info-team")
+        .attr("transform", `translate(${chartWidth - 300},${10})`)
+        .style("opacity", 0);
+        
+
+    // Rectangle
+    infoGroup.append("rect")
+        .attr("width", 280)
+        .attr("height", 60)
+        .attr("fill", "white")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1);
+
+    // Text
+    infoGroup.append("text")
+        .attr("x", 10)
+        .attr("y", 25)
+        .attr("font-size", 12)
+        .attr("id", "info-institution-text");
+
+    
+    xList = [...new Set(sortedData.map(d => d[0].split("_")[0]))];
+
+    xScale = d3.scaleBand()
         .range([0, chartWidth])
-        .domain(sortedData.map(d => d[0].split("_")[0])) // Use sorted data for x domain
+        .domain(xList) // Use sorted data for x domain
         .padding(0.2);
+
+    console.log(xList);
 
     const yScale = d3.scaleLinear()
         .range([height, 0])
-        .domain([0, 110]);
+        .domain([0, 120]);
 
     const cumulativeValues = {};
 
@@ -134,27 +173,32 @@ function CO2EmissionsPerInstitution(data) {
             return currentY;
         })
         .attr("height", d => height - yScale(d[1]))
-        .attr("fill", d => colorScaleModes(d[0].split("_")[1])) // Utiliser le mode pour définir la couleur
+        .attr("fill", d => colorScaleModes(d[0].split("_")[1]))
         .attr("opacity", 1) // Initial opacity set to 1
         .on("mouseover", function (event, d) {
           handleInstitutionHover(event, d);
+          infoGroup.style("opacity", 1);          
         })
         .on("mouseout", function() {
           d3.selectAll(".bar-institution").attr("opacity", 1);
           d3.selectAll(".bar-teams").attr("opacity", 1);
           d3.select("#info-institution-text").text("");
+          infoGroup.style("opacity", 0);
         });
 
     svg.append("g")
+        .attr("class", "x-axis") 
         .attr("transform", `translate(0,${height})`)
         .call(d3.axisBottom(xScale))
-        .selectAll("text") // Rotate x-axis labels for better readability
-            .attr("transform", "rotate(-45)")
-            .attr("text-anchor", "end");
+        .selectAll("text")
+        .attr("class", "x-label") 
+        .attr("text-anchor", "middle")
+        .call(drag);
 
     svg.append("g")
-        .call(d3.axisLeft(yScale));
+        .call(d3.axisLeft(yScale).tickFormat(d => (d <= 100 ? d : ""))); // supprime les - au dessus de 100
         // Adjusted margins for better spacing
+    
         svg.append("text")
         .attr("x", chartWidth / 2)
         .attr("y", height + margin.top + 100)
@@ -175,27 +219,77 @@ function CO2EmissionsPerInstitution(data) {
         .style("text-anchor", "middle")
         .style("font-size", "16px")
         .style("text-decoration", "underline")
-        .text("CO2 Emissions per Institution");
+        .text("Percentage of different means of transport used by each Institutions");
 
-    //Create rectangle to display information vers mouseover
-    let infoGroup = svg.append('g')
-        .attr("id", "info-team")
-        .attr("transform", `translate(${chartWidth - 200},${10})`);
+    
 
-    // Rectangle
-    infoGroup.append("rect")
-        .attr("width", 180)
-        .attr("height", 60)
-        .attr("fill", "white")
-        .attr("stroke", "black")
-        .attr("stroke-width", 1);
 
-    // Text
-    infoGroup.append("text")
-        .attr("x", 10)
-        .attr("y", 25)
-        .attr("font-size", 12)
-        .attr("id", "info-institution-text");
+
+
+    function dragstarted(event, d) {
+      d3.select(this).raise().classed("active", true);
+    }
+
+
+
+    function dragged(event, d) {
+      //console.log(xList);
+      const [xMouse, yMouse] = d3.pointer(event);
+      const xGraph = xMouse - xScale.step();
+      //console.log(xGraph)
+
+      
+      //On recupere les informations de la colonne correspondant à l'Y de curseur
+      const MouseIndex = Math.floor(xGraph / xScale.step());
+      const MouseLabel = xList[MouseIndex];
+      const MousePosition = xScale(xList[MouseIndex]);
+      
+      //On recupere les informations de la colonne correspondant à l'item selectionné
+      const DragLabel = d;
+      const DragIndex = xList.indexOf(DragLabel);
+      const DragOriginPosition = xScale(DragLabel);
+
+      //console.log("Current Mouse: ",MouseIndex,MouseLabel,MousePosition);
+      //console.log("Current Drag: ",DragIndex,DragLabel,DragOriginPosition);
+
+      if (MouseIndex >= 0 && MouseIndex < xList.length) {
+        if (MousePosition !== DragOriginPosition) {
+          //console.log("Differentes etiquettes");
+
+          
+          //console.log("current index",DragIndex,"origin index",MouseIndex);
+          
+          //On invertit les 2 colonnes
+          varTemp = xList[DragIndex];
+          xList[DragIndex] = xList[MouseIndex];
+          xList[MouseIndex] = varTemp;
+          
+          //console.log("scale",xScale("Many-Faced God"));
+          //console.log("scale",xScale("Faith of the Seven"));
+          xScale.domain(xList).padding(0.2); // Use sorted data for x domain
+
+          // Mettre à jour l'axe x
+          svg.select(".x-axis")
+            .transition()
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(xScale));
+
+          // Mettre à jour les rectangles
+          svg.selectAll(".bar-institution")
+            .transition()
+            .attr("x", (d) => xScale(d[0].split("_")[0]));
+
+        }
+      }
+    }
+
+
+
+    function dragended(event, d) {
+      d3.select(this).classed("active", false);
+    }
+    
+
 }
 
 // Load user data to create a mapping between user_id and team/home
@@ -236,3 +330,4 @@ d3.tsv("../data/users.tsv", d => ({
     </script>
   </body>
 </html>
+
